@@ -6,7 +6,7 @@ on:
   pull_request:
     branches: [main]
   workflow_dispatch:
-
+# 1 шаг
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
@@ -58,7 +58,7 @@ jobs:
 
       - name: Static analysis (clang-tidy)
         run: clang-tidy src/main.cpp -- -I.
-
+# 2 шаг
   docker-build-push:
     needs: build-and-test
     if: github.ref == 'refs/heads/main'
@@ -81,3 +81,40 @@ jobs:
           IMAGE_TAG=ghcr.io/${{ env.REPO_LOWER }}:latest
           docker build -t $IMAGE_TAG .
           docker push $IMAGE_TAG
+# 3 шаг
+  deploy-staging:
+    needs: docker-build-push
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Convert repository name to lowercase
+        run: |
+          echo "REPO_LOWER=$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
+
+      - name: Deploy to staging
+        run: |
+          docker run -d --name staging-app -p 8080:8080 ghcr.io/${{ env.REPO_LOWER }}:latest
+          sleep 5
+          curl --retry 5 --retry-delay 2 --fail http://localhost:8080/health || exit 1
+          echo "Staging deployment successful" >> deployment.log
+
+      - name: Save staging logs
+        if: always()
+        run: docker logs staging-app > staging_logs.txt
+
+      - name: Upload staging logs
+        uses: actions/upload-artifact@v4
+        with:
+          name: staging-logs
+          path: staging_logs.txt
+
+      - name: Save staging metrics
+        run: |
+          curl -s http://localhost:8080/metrics > staging_metrics.txt
+
+      - name: Upload staging metrics
+        uses: actions/upload-artifact@v4
+        with:
+          name: staging-metrics
+          path: staging_metrics.txt
