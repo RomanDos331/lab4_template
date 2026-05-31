@@ -58,7 +58,8 @@ jobs:
 
       - name: Static analysis (clang-tidy)
         run: clang-tidy src/main.cpp -- -I.
-docker-build-push:
+
+  docker-build-push:
     needs: build-and-test
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
